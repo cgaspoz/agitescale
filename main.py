@@ -7,6 +7,7 @@ import serial
 import io
 
 from PyPDF2 import PdfFileWriter, PdfFileReader
+from pdf2image import convert_from_bytes
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Flowable, Frame
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 # from reportlab.graphics.shapes import Drawing, Rect
@@ -22,7 +23,22 @@ from reportlab.graphics import renderPDF
 
 conn = sqlite3.connect('agitescale.db')
 
-ser = serial.Serial('COM10', 9800, timeout=0.1)
+ser = serial.Serial('/dev/ttyUSB0', 9800, timeout=0.1)
+
+# sudo brother_ql -b pyusb -m QL-710W -p usb://0x04f9:0x2043/000C5Z139797 print -l 50 -r 90 label-1.jpg
+
+import brother_ql
+from brother_ql.raster import BrotherQLRaster
+from brother_ql.backends.helpers import send
+
+# Using USB connected printer 
+PRINTER_IDENTIFIER = 'usb://0x04f9:0x2043/000C5Z139797'
+
+
+def send_to_printer(filename):
+    printer = BrotherQLRaster('QL-710W')
+    print_data = brother_ql.brother_ql_create.convert(printer, [filename], '50', rotate=90)
+    send(print_data, PRINTER_IDENTIFIER)
 
 
 def read_kern():
@@ -317,8 +333,8 @@ def generate_pdf_label(label):
     styleSellerName = ParagraphStyle('styleSellerName', fontName="Helvetica-Bold", fontSize=8, alignment=1, spaceAfter=0)
     styleSellerAddress = ParagraphStyle('styleSellerAddress', fontName="Helvetica", fontSize=6, alignment=1, spaceAfter=0)
 
-    temp_pdf_file = io.BytesIO()
-    c = canvas.Canvas(temp_pdf_file, pagesize=(60*mm, 50*mm))
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=(60*mm, 50*mm))
 
     header = []
     header.append(Paragraph('{}'.format(label['name']), styleName))
@@ -347,17 +363,12 @@ def generate_pdf_label(label):
 
     c.showPage()
     c.save()
+    
+    pdf = buffer.getvalue()
+    buffer.close()
 
-    temp_pdf_file.seek(0)
-    new_pdf = PdfFileReader(temp_pdf_file)
-    existing_pdf = PdfFileReader(open("static/label.pdf", "rb"))
-    output = PdfFileWriter()
-    page = existing_pdf.getPage(0)
-    page.mergePage(new_pdf.getPage(0))
-    output.addPage(page)
-    outputStream = open("print.pdf", "wb")
-    output.write(outputStream)
-    outputStream.close()
+    image = convert_from_bytes(pdf)[0]
+    send_to_printer(image)
 
 
 # Press the green button in the gutter to run the script.
@@ -366,7 +377,7 @@ if __name__ == '__main__':
     label = None
     seller = None
     app = App(title="L'agité du bocal", width=1024, height=600)
-    app.tk.iconbitmap("./static/favicon.ico")
+    #app.tk.iconbitmap("./static/favicon.ico")
 
     status_box = Box(app, width="fill", align="bottom", border=True)
     status_message = Text(status_box, text="Ready", size=10, align="left")
@@ -393,7 +404,7 @@ if __name__ == '__main__':
     # Used to select to product at the beginning
 
     product_selection = Window(app, title="Sélectionner un produit à peser...", height=300, visible=False)
-    product_selection.tk.iconbitmap("./static/favicon.ico")
+    #product_selection.tk.iconbitmap("./static/favicon.ico")
     Text(product_selection, text="")
     Text(product_selection, text="Sélectionner le produit")
     Combo(product_selection, width="fill", options=products_dict, command=select_product)
@@ -406,7 +417,7 @@ if __name__ == '__main__':
 
 
     product_window = Window(app, title="Gestion d'article", visible=False)
-    product_window.tk.iconbitmap("./static/favicon.ico")
+    #product_window.tk.iconbitmap("./static/favicon.ico")
     Text(product_window, text="Données article")
     product_form_box = Box(product_window, layout="grid", width="fill", border=True)
     Text(product_form_box, text="Nom du produit", grid=[0, 0], align="left")
