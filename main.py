@@ -5,12 +5,12 @@ import math
 import csv
 import serial
 import io
+import os
 
 from PyPDF2 import PdfFileWriter, PdfFileReader
 from pdf2image import convert_from_bytes
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Flowable, Frame
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-# from reportlab.graphics.shapes import Drawing, Rect
 from reportlab.graphics import barcode
 from reportlab.lib.units import cm
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
@@ -20,16 +20,14 @@ from reportlab.pdfgen import canvas
 from reportlab.graphics.barcode.qr import QrCodeWidget
 from reportlab.graphics import renderPDF
 
-
-conn = sqlite3.connect('agitescale.db')
-
-ser = serial.Serial('/dev/ttyUSB0', 9800, timeout=0.1)
-
-# sudo brother_ql -b pyusb -m QL-710W -p usb://0x04f9:0x2043/000C5Z139797 print -l 50 -r 90 label-1.jpg
-
 import brother_ql
 from brother_ql.raster import BrotherQLRaster
 from brother_ql.backends.helpers import send
+
+
+conn = sqlite3.connect(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'agitescale.db'))
+
+ser = serial.Serial('/dev/ttyUSB0', 9800, timeout=0.1)
 
 # Using USB connected printer 
 PRINTER_IDENTIFIER = 'usb://0x04f9:0x2043/000C5Z139797'
@@ -68,7 +66,7 @@ def get_weight():
 
 def get_products_dict():
     cur = conn.cursor()
-    cur.execute("SELECT id, name, description FROM products")
+    cur.execute("SELECT oid, name, description FROM products")
 
     rows = cur.fetchall()
 
@@ -80,7 +78,7 @@ def get_products_dict():
 
 def get_product(product_id):
     cur = conn.cursor()
-    product_query = """SELECT id, name, description, price_kg, price_fixed, expiration_days FROM products WHERE id=?"""
+    product_query = """SELECT oid, name, description, price_kg, price_fixed, expiration_days FROM products WHERE oid=?"""
     cur.execute(product_query, (product_id,))
 
     row = cur.fetchone()
@@ -92,7 +90,7 @@ def get_product(product_id):
 def save_product(product):
     cur = conn.cursor()
     if 'id' in product:
-        product_query = """UPDATE products SET name=?, description=?, price_kg=?, price_fixed=?, expiration_days=? WHERE id=?"""
+        product_query = """UPDATE products SET name=?, description=?, price_kg=?, price_fixed=?, expiration_days=? WHERE oid=?"""
         cur.execute(product_query, (product['name'], product['description'], product['price_kg'], product['price_fixed'], product['expiration_days'], product['id'],))
         conn.commit()
     else:
@@ -100,7 +98,7 @@ def save_product(product):
         cur.execute(product_query, (product['name'], product['description'], product['price_kg'], product['price_fixed'],
                                     product['expiration_days']))
         conn.commit()
-        product_query = """SELECT id FROM products ORDER BY id DESC"""
+        product_query = """SELECT oid FROM products ORDER BY oid DESC"""
         cur.execute(product_query)
         row = cur.fetchone()
         product['id'] = row[0]
@@ -109,7 +107,7 @@ def save_product(product):
 
 def get_sellers_dict():
     cur = conn.cursor()
-    cur.execute("SELECT id, name FROM sellers")
+    cur.execute("SELECT oid, name FROM sellers")
 
     rows = cur.fetchall()
 
@@ -131,11 +129,11 @@ def save_label(label):
 def get_labels():
     cur = conn.cursor()
     cur.execute("""SELECT 
-                        labels.id, sellers.name, products.id, products.name, products.description, labels.weight, labels.price, labels.price_kg, labels.packing_date, labels.expiry_date 
+                        labels.oid, sellers.name, products.oid, products.name, products.description, labels.weight, labels.price, labels.price_kg, labels.packing_date, labels.expiry_date 
                    FROM
                         labels
-                        INNER JOIN sellers ON sellers.id = labels.seller_id
-                        INNER JOIN products ON products.id = labels.product_id;
+                        INNER JOIN sellers ON sellers.oid = labels.seller_id
+                        INNER JOIN products ON products.oid = labels.product_id;
                    """)
     rows = cur.fetchall()
     return rows
@@ -143,7 +141,7 @@ def get_labels():
 
 def get_seller(seller_id):
     cur = conn.cursor()
-    seller_query = """SELECT id, name, address FROM sellers WHERE id=?"""
+    seller_query = """SELECT oid, name, address FROM sellers WHERE oid=?"""
     cur.execute(seller_query, (seller_id,))
 
     row = cur.fetchone()
@@ -208,16 +206,22 @@ def set_label():
 
 
 def test_print_pdf():
-    product = get_product(1)
-    seller = get_seller(1)
-    label = product.copy()
-    label['packing_date'] = '2020-08-01'
-    label['expiry_date'] = '2020-08-10'
+    global product
+    global seller
+    global label
+    if not product:
+        product = get_product(1)
+    if not seller:
+        seller = get_seller(1)
+    if not label:
+        label = product.copy()
+        label['packing_date'] = '2088-88-88'
+        label['expiry_date'] = '2099-99-99'
     label['product_id'] = label['id']
     label['seller_id'] = seller['id']
     label['seller_name'] = seller['name']
     label['seller_address'] = seller['address']
-    label['weight'] = 0.987
+    label['weight'] = 9.876
 
     if label['price_fixed']:
         label['price_fixed'] = format_price(float(label['price_fixed']))
@@ -288,7 +292,7 @@ def format_price(price):
 def draw_label():
     generate_label()
     label_preview.clear()
-    label_preview.image(0, 0, "static/label.png")
+    label_preview.image(0, 0, os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static', 'label.png'))
     label_preview.text(20, 10, label['name'], size=30)
     label_preview.text(20, 70, label['description'], size=20)
     if not label['price_fixed']:
@@ -328,38 +332,61 @@ def export_file():
 
 
 def generate_pdf_label(label):
-    styleName = ParagraphStyle('styleName', fontName="Helvetica-Bold", fontSize=12, alignment=1, spaceAfter=5)
+    styleName = ParagraphStyle('styleName', fontName="Helvetica-Bold", fontSize=13, alignment=1, spaceAfter=5)
     styleDescription = ParagraphStyle('styleDescription', fontName="Helvetica", fontSize=9, alignment=1, spaceAfter=0)
     styleSellerName = ParagraphStyle('styleSellerName', fontName="Helvetica-Bold", fontSize=8, alignment=1, spaceAfter=0)
     styleSellerAddress = ParagraphStyle('styleSellerAddress', fontName="Helvetica", fontSize=6, alignment=1, spaceAfter=0)
 
     buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=(60*mm, 50*mm))
+    c = canvas.Canvas(buffer, pagesize=(60*mm, 46.9*mm))
 
     header = []
     header.append(Paragraph('{}'.format(label['name']), styleName))
     header.append(Paragraph('{}'.format(label['description']), styleDescription))
-    f = Frame(2*mm, 32*mm, 56*mm, 16*mm, leftPadding=0, bottomPadding=0, rightPadding=0, topPadding=0, showBoundary=0)
+    f = Frame(0*mm, 30.9*mm, 60*mm, 16*mm, leftPadding=0, bottomPadding=0, rightPadding=0, topPadding=0, showBoundary=0)
     c.setStrokeColorCMYK(0, 1, 0.98, 0.15)
     f.addFromList(header, c)
-
+    
+    c.setStrokeColorCMYK(0, 0, 0, 1)
+    c.line(0*mm, 30.9*mm, 60*mm, 30.9*mm)
+    c.line(21*mm, 30.9*mm, 21*mm, 26*mm)
+    c.line(43*mm, 30.9*mm, 43*mm, 26*mm)
+    
+    c.setFont('Helvetica', 5)
+    c.drawString(0.4 * mm, 28.5 * mm, 'Emballé le')
+    c.drawString(0.4 * mm, 26.5 * mm, 'Abgepackt am')
+    
+    c.drawString(22.4 * mm, 28.5 * mm, 'A consommer jusqu’au')
+    c.drawString(22.4 * mm, 26.5 * mm, 'Zu verbrauchen bis')
+    
+    c.drawString(44.4 * mm, 28.5 * mm, 'Poids')
+    c.drawString(44.4 * mm, 26.5 * mm, 'Gewicht')
+    
     c.setFont('Helvetica', 8)
-    c.drawString(2.4 * mm, 23 * mm, label['packing_date'])
-    c.drawString(21.5 * mm, 23 * mm, label['expiry_date'])
-    c.drawString(40.5 * mm, 23 * mm, "{:5.3f} kg".format(label['weight']))
+    c.drawString(0.4 * mm, 22 * mm, "{}-{}-{}".format(label['packing_date'][8:10], label['packing_date'][5:7], label['packing_date'][0:4]))
+    c.setFont('Helvetica-Bold', 8)
+    c.drawString(22.4 * mm, 22 * mm, "{}-{}-{}".format(label['expiry_date'][8:10], label['expiry_date'][5:7], label['expiry_date'][0:4]))
+    c.setFont('Helvetica', 8)
+    c.drawString(44.4 * mm, 22 * mm, "{:5.3f} kg".format(label['weight']))
+    
+    c.rect(30 * mm, 7 * mm, 30 * mm, 11.4 * mm, fill=0)
+    c.line(0*mm, 7*mm, 60*mm, 7*mm)
+    
+    c.setFont('Helvetica', 7)
+    c.drawString(31.4 * mm, 15 * mm, 'Fr.')
 
     if not label['price_fixed']:
         c.setFont('Helvetica', 7)
-        c.drawString(9.5 * mm, 16 * mm, 'Fr/kg')
+        c.drawString(7.5 * mm, 15 * mm, 'Fr/kg')
         c.setFont('Helvetica', 10)
-        c.drawRightString(28 * mm, 10 * mm, "{:7.2f}".format(label['price_kg']))
+        c.drawRightString(26 * mm, 10 * mm, "{:7.2f}".format(label['price_kg']))
     c.setFont('Helvetica-Bold', 16)
     c.drawRightString(56 * mm, 10 * mm, "{:7.2f}".format(label['price']))
 
     c.setFont('Helvetica-Bold', 8)
-    c.drawCentredString(30 * mm, 5 * mm, "{}".format(label['seller_name']))
+    c.drawCentredString(30 * mm, 3 * mm, "{}".format(label['seller_name']))
     c.setFont('Helvetica', 6)
-    c.drawCentredString(30 * mm, 2 * mm, "{}".format(label['seller_address']))
+    c.drawCentredString(30 * mm, 0 * mm, "{}".format(label['seller_address']))
 
     c.showPage()
     c.save()
@@ -367,17 +394,16 @@ def generate_pdf_label(label):
     pdf = buffer.getvalue()
     buffer.close()
 
-    image = convert_from_bytes(pdf)[0]
+    image = convert_from_bytes(pdf, dpi=300)[0]
+    image.save('label.png')
     send_to_printer(image)
 
 
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     product = None
     label = None
     seller = None
     app = App(title="L'agité du bocal", width=1024, height=600)
-    #app.tk.iconbitmap("./static/favicon.ico")
 
     status_box = Box(app, width="fill", align="bottom", border=True)
     status_message = Text(status_box, text="Ready", size=10, align="left")
@@ -390,10 +416,11 @@ if __name__ == '__main__':
     Text(options_box, text="Impression")
     PushButton(options_box, text="Démarrer l'impression", command=start_printing, width="fill")
     PushButton(options_box, text="Stopper l'impression", command=stop_printing, width="fill")
+    PushButton(options_box, text="Tester l'impression", command=test_print_pdf, width="fill")
+    
     Text(options_box, text="")
     Text(options_box, text="Données")
     PushButton(options_box, text="Exporter les données", command=export_file, width="fill")
-
 
     content_box = Box(app, align="top", width="fill", border=True)
 
@@ -404,7 +431,6 @@ if __name__ == '__main__':
     # Used to select to product at the beginning
 
     product_selection = Window(app, title="Sélectionner un produit à peser...", height=300, visible=False)
-    #product_selection.tk.iconbitmap("./static/favicon.ico")
     Text(product_selection, text="")
     Text(product_selection, text="Sélectionner le produit")
     Combo(product_selection, width="fill", options=products_dict, command=select_product)
@@ -415,9 +441,7 @@ if __name__ == '__main__':
     PushButton(product_selection_buttons_box, text="Créer un nouveau produit", align="right", command=button_create_new_product)
     PushButton(product_selection_buttons_box, text="OK", align="right", command=button_confirm_product_selection)
 
-
     product_window = Window(app, title="Gestion d'article", visible=False)
-    #product_window.tk.iconbitmap("./static/favicon.ico")
     Text(product_window, text="Données article")
     product_form_box = Box(product_window, layout="grid", width="fill", border=True)
     Text(product_form_box, text="Nom du produit", grid=[0, 0], align="left")
@@ -442,16 +466,10 @@ if __name__ == '__main__':
 
     label_box = Box(content_box, height="fill", width="fill", align="left", visible=False)
     label_preview = Drawing(label_box, width=510, height=426)
-    label_preview.image(0, 0, "static/label.png")
+    label_preview.image(0, 0, os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static', 'label.png'))
     label_box.show()
-
-
 
     if not product:
         change_product()
 
-
-
     app.display()
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/

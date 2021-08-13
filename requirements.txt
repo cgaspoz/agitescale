@@ -1,0 +1,6 @@
+guizero
+pysqlite3
+PyPDF2
+pdf2image
+reportlab
+brother_ql
