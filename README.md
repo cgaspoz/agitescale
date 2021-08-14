@@ -3,6 +3,8 @@
 GUI pour gérer l'impression d'étiquettes de prix sur une Brother QL-710W à partir de la pesée effectuée sur une balance Kern PCD connectée à travers l'interface RS-232.
 Le programme tourne sur un raspi équipé d'un écran LCD touch (1024x600).
 
+> Attention, en utilisant un câble USB<->RS-232 (p.ex. https://www.digitec.ch/de/s1/product/startech-usb-to-rs232-serial-adapter-043m-usb-kabel-10145274) brancher le câble dans un port USB 2.0 (ports noirs) et non pas dans un port USB 3.0 (ports bleus). L'imprimante peut être branchée dans n'importe quel port.
+
 ## Installer les dépendances
 
 `sudo apt-get install poppler-utils sqlitebrowser`
