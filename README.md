@@ -80,6 +80,12 @@ Redémarrer le raspberry pi
    - **Command**: `/usr/bin/python3 /home/pi/agitescale/main.py`
    - **Image**: Ajouter l'icône à partir du fichier `/home/pi/agitescale/static/favicon.ico`
 
+## Mettre à jour l'application
+
+1. Aller dans le répertoire de l'application (p.ex. `/home/pi/agitescale`)
+2. Exécuter la commande: `git pull` pour récupérer la nouvelle version
+3. Mettre à jour les dépendances: `sudo pip3 install -r requirements.txt`
+
 ## Debug
 
 En cas d'erreur (l'application ne s'ouvre pas), lancer l'application dans le terminal à l'aide de la commande:
