@@ -3,7 +3,13 @@
 GUI pour gérer l'impression d'étiquettes de prix sur une Brother QL-710W à partir de la pesée effectuée sur une balance Kern PCD connectée à travers l'interface RS-232.
 Le programme tourne sur un raspi équipé d'un écran LCD touch (1024x600).
 
+## Installer les dépendances
+
+`sudo apt-get install poppler-utils sqlitebrowser`
+
 ## Installer les modules Python
+
+A partir du répertoire de l'application (p.ex. `/home/pi/agitescale`) exécuter la commande:
 
 `sudo pip3 install -r requirements.txt`
 
@@ -15,9 +21,9 @@ Créer un fichier nommé `99-brother.rules` dans le répertoire `/etc/udev/rules
 
 ## Créer la base de données
 
-Créer une nouvelle base de données dans le répertoire de base (agitescale) nommée `agitescale.db`
-
-Exécuter les scripts ci-dessous pour créer les 3 tables:
+1. Créer une nouvelle base de données dans le répertoire de base (agitescale) nommée `agitescale.db` à l'aide de l'application **DB Browser for SQLite** (dans le menu *Programming*)
+2. Cliquer sur *Cancel* quand la fenêtre de création d'une table s'ouvre
+3. Aller sur l'onglet *Execute SQL* et exécuter les scripts ci-dessous pour créer les 3 tables:
 
 ```
 CREATE TABLE `products` (
@@ -66,10 +72,18 @@ Redémarrer le raspberry pi
 
 ## Ajouter l'application au menu
 
-1. Aller dane le menu `Preferences > Main Menu Editor`
-2. Choisir une catégorie (p.ex. Office)
-3. Cliquer sur `New Item`
+1. Aller dane le menu *Preferences > Main Menu Editor*
+2. Choisir une catégorie (p.ex. *Office*)
+3. Cliquer sur *New Item*
 4. Créer une entrée en utilisant les informations ci-dessous:
    - **Name**: Agite Scale
    - **Command**: `/usr/bin/python3 /home/pi/agitescale/main.py`
    - **Image**: Ajouter l'icône à partir du fichier `/home/pi/agitescale/static/favicon.ico`
+
+## Debug
+
+En cas d'erreur (l'application ne s'ouvre pas), lancer l'application dans le terminal à l'aide de la commande:
+
+`python3 /home/pi/agitescale/main.py`
+
+Les messages d'erreur s'afficher dans la console
