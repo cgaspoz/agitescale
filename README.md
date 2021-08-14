@@ -63,3 +63,13 @@ Mettre les droits d'exécution sur le fichier:
 `chmod +x /home/pi/.config/autostart/AgiteScale.desktop`
 
 Redémarrer le raspberry pi
+
+## Ajouter l'application au menu
+
+1. Aller dane le menu `Preferences > Main Menu Editor`
+2. Choisir une catégorie (p.ex. Office)
+3. Cliquer sur `New Item`
+4. Créer une entrée en utilisant les informations ci-dessous:
+   - **Name**: Agite Scale
+   - **Command**: `/usr/bin/python3 /home/pi/agitescale/main.py`
+   - **Image**: Ajouter l'icône à partir du fichier `/home/pi/agitescale/static/favicon.ico`
