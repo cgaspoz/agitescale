@@ -1,4 +1,4 @@
-from guizero import App, Text, PushButton, TextBox, Combo, Window, Box, Picture, Drawing
+from guizero import App, Text, PushButton, TextBox, Combo, Window, Box, Drawing
 import sqlite3
 import datetime
 import math
@@ -7,18 +7,11 @@ import serial
 import io
 import os
 
-from PyPDF2 import PdfFileWriter, PdfFileReader
 from pdf2image import convert_from_bytes
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image, Flowable, Frame
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.graphics import barcode
-from reportlab.lib.units import cm
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
+from reportlab.platypus import Paragraph, Frame
+from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.lib.colors import black, white
 from reportlab.pdfgen import canvas
-from reportlab.graphics.barcode.qr import QrCodeWidget
-from reportlab.graphics import renderPDF
 
 import brother_ql
 from brother_ql.raster import BrotherQLRaster
@@ -27,25 +20,46 @@ from brother_ql.backends.helpers import send
 
 conn = sqlite3.connect(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'agitescale.db'))
 
-ser = serial.Serial('/dev/ttyUSB0', 9800, timeout=0.1)
+try:
+    ser = serial.Serial('/dev/ttyUSB0', 9800, timeout=0.1)
+except serial.serialutil.SerialException:
+    ser = None
 
-# Using USB connected printer 
+# Using USB connected printer
 PRINTER_IDENTIFIER = 'usb://0x04f9:0x2043/000C5Z139797'
 
 
 def send_to_printer(filename):
     printer = BrotherQLRaster('QL-710W')
     print_data = brother_ql.brother_ql_create.convert(printer, [filename], '50', rotate=90)
-    send(print_data, PRINTER_IDENTIFIER)
+    try:
+        status_message.value = "Impression de l'étiquette en cours..."
+        send(print_data, PRINTER_IDENTIFIER)
+    except ValueError:
+        app.error("Brother QL-710W", "L'imprimante n'est pas connectée ou est éteinte!")
 
 
 def read_kern():
-    line = ser.readline()
-    if line:
-        weight = int(line[11:16])/1000
-        print(line, weight)
+    serial_error = False
+    if ser:
+        try:
+            line = ser.readline()
+        except AttributeError:
+            line = None
+            serial_error = True
+        if line:
+            weight = int(line[11:16])/1000
+            status_message.value = "Mesure {} kg".format(weight)
+        else:
+            print("No line")
+            if not serial_error:
+                status_message.value = "Pas de mesure"
+            else:
+                status_message.value = "Erreur lecture balance"
+            weight = None
+        return weight
     else:
-        print("No line")
+        status_message.value("Balance non connectée")
         weight = None
     return weight
 
@@ -183,7 +197,11 @@ def set_product_from_fields(product):
 def update_expiry_date():
     current_date = datetime.datetime.now().date()
     packing_date.value = current_date
-    expiry_date.value = current_date + datetime.timedelta(days=int(expiration_days.value))
+    try:
+        days = int(expiration_days.value)
+    except ValueError:
+        days = 0
+    expiry_date.value = current_date + datetime.timedelta(days=days)
 
 
 def set_label_fields(product):
@@ -233,6 +251,12 @@ def test_print_pdf():
 
 
 def change_product():
+    product_selection.show(wait=True)
+    app.cancel(get_weight)
+
+
+def cancel_product():
+    product_window.hide()
     product_selection.show(wait=True)
     app.cancel(get_weight)
 
@@ -334,8 +358,6 @@ def export_file():
 def generate_pdf_label(label):
     styleName = ParagraphStyle('styleName', fontName="Helvetica-Bold", fontSize=13, alignment=1, spaceAfter=5)
     styleDescription = ParagraphStyle('styleDescription', fontName="Helvetica", fontSize=9, alignment=1, spaceAfter=0)
-    styleSellerName = ParagraphStyle('styleSellerName', fontName="Helvetica-Bold", fontSize=8, alignment=1, spaceAfter=0)
-    styleSellerAddress = ParagraphStyle('styleSellerAddress', fontName="Helvetica", fontSize=6, alignment=1, spaceAfter=0)
 
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=(60*mm, 46.9*mm))
@@ -346,32 +368,32 @@ def generate_pdf_label(label):
     f = Frame(0*mm, 30.9*mm, 60*mm, 16*mm, leftPadding=0, bottomPadding=0, rightPadding=0, topPadding=0, showBoundary=0)
     c.setStrokeColorCMYK(0, 1, 0.98, 0.15)
     f.addFromList(header, c)
-    
+
     c.setStrokeColorCMYK(0, 0, 0, 1)
     c.line(0*mm, 30.9*mm, 60*mm, 30.9*mm)
     c.line(21*mm, 30.9*mm, 21*mm, 26*mm)
     c.line(43*mm, 30.9*mm, 43*mm, 26*mm)
-    
+
     c.setFont('Helvetica', 5)
     c.drawString(0.4 * mm, 28.5 * mm, 'Emballé le')
     c.drawString(0.4 * mm, 26.5 * mm, 'Abgepackt am')
-    
+
     c.drawString(22.4 * mm, 28.5 * mm, 'A consommer jusqu’au')
     c.drawString(22.4 * mm, 26.5 * mm, 'Zu verbrauchen bis')
-    
+
     c.drawString(44.4 * mm, 28.5 * mm, 'Poids')
     c.drawString(44.4 * mm, 26.5 * mm, 'Gewicht')
-    
+
     c.setFont('Helvetica', 8)
     c.drawString(0.4 * mm, 22 * mm, "{}-{}-{}".format(label['packing_date'][8:10], label['packing_date'][5:7], label['packing_date'][0:4]))
     c.setFont('Helvetica-Bold', 8)
     c.drawString(22.4 * mm, 22 * mm, "{}-{}-{}".format(label['expiry_date'][8:10], label['expiry_date'][5:7], label['expiry_date'][0:4]))
     c.setFont('Helvetica', 8)
     c.drawString(44.4 * mm, 22 * mm, "{:5.3f} kg".format(label['weight']))
-    
+
     c.rect(30 * mm, 7 * mm, 30 * mm, 11.4 * mm, fill=0)
     c.line(0*mm, 7*mm, 60*mm, 7*mm)
-    
+
     c.setFont('Helvetica', 7)
     c.drawString(31.4 * mm, 15 * mm, 'Fr.')
 
@@ -384,13 +406,13 @@ def generate_pdf_label(label):
     c.drawRightString(56 * mm, 10 * mm, "{:7.2f}".format(label['price']))
 
     c.setFont('Helvetica-Bold', 8)
-    c.drawCentredString(30 * mm, 3 * mm, "{}".format(label['seller_name']))
+    c.drawCentredString(30 * mm, 3.8 * mm, "{}".format(label['seller_name']))
     c.setFont('Helvetica', 6)
-    c.drawCentredString(30 * mm, 0 * mm, "{}".format(label['seller_address']))
+    c.drawCentredString(30 * mm, 1 * mm, "{}".format(label['seller_address']))
 
     c.showPage()
     c.save()
-    
+
     pdf = buffer.getvalue()
     buffer.close()
 
@@ -405,71 +427,74 @@ if __name__ == '__main__':
     seller = None
     app = App(title="L'agité du bocal", width=1024, height=600)
 
-    status_box = Box(app, width="fill", align="bottom", border=True)
-    status_message = Text(status_box, text="Ready", size=10, align="left")
+    if not ser:
+        app.error("Kern Scale", "La balance n'est pas connectée! Fermer l'application, connecter la balance et relancer l'application.")
+    else:
+        status_box = Box(app, width="fill", align="bottom", border=True)
+        status_message = Text(status_box, text="Ready", size=10, align="left")
 
-    options_box = Box(app, height="fill", align="right")
-    Text(options_box, text="Options")
-    PushButton(options_box, text="Changer le produit",
-               command=change_product, width="fill")
-    Text(options_box, text="")
-    Text(options_box, text="Impression")
-    PushButton(options_box, text="Démarrer l'impression", command=start_printing, width="fill")
-    PushButton(options_box, text="Stopper l'impression", command=stop_printing, width="fill")
-    PushButton(options_box, text="Tester l'impression", command=test_print_pdf, width="fill")
-    
-    Text(options_box, text="")
-    Text(options_box, text="Données")
-    PushButton(options_box, text="Exporter les données", command=export_file, width="fill")
+        options_box = Box(app, height="fill", align="right")
+        Text(options_box, text="Options")
+        PushButton(options_box, text="Changer le produit",
+                   command=change_product, width="fill")
+        Text(options_box, text="")
+        Text(options_box, text="Impression")
+        PushButton(options_box, text="Démarrer l'impression", command=start_printing, width="fill")
+        PushButton(options_box, text="Stopper l'impression", command=stop_printing, width="fill")
+        PushButton(options_box, text="Tester l'impression", command=test_print_pdf, width="fill")
 
-    content_box = Box(app, align="top", width="fill", border=True)
+        Text(options_box, text="")
+        Text(options_box, text="Données")
+        PushButton(options_box, text="Exporter les données", command=export_file, width="fill")
 
-    products_dict = get_products_dict()
-    sellers_dict = get_sellers_dict()
+        content_box = Box(app, align="top", width="fill", border=True)
 
-    # product_selection window
-    # Used to select to product at the beginning
+        products_dict = get_products_dict()
+        sellers_dict = get_sellers_dict()
 
-    product_selection = Window(app, title="Sélectionner un produit à peser...", height=300, visible=False)
-    Text(product_selection, text="")
-    Text(product_selection, text="Sélectionner le produit")
-    Combo(product_selection, width="fill", options=products_dict, command=select_product)
-    Text(product_selection, text="")
-    Text(product_selection, text="Sélectionner le fournisseur")
-    Combo(product_selection, width="fill", options=sellers_dict, command=select_seller)
-    product_selection_buttons_box = Box(product_selection, width="fill", align="bottom")
-    PushButton(product_selection_buttons_box, text="Créer un nouveau produit", align="right", command=button_create_new_product)
-    PushButton(product_selection_buttons_box, text="OK", align="right", command=button_confirm_product_selection)
+        # product_selection window
+        # Used to select to product at the beginning
 
-    product_window = Window(app, title="Gestion d'article", visible=False)
-    Text(product_window, text="Données article")
-    product_form_box = Box(product_window, layout="grid", width="fill", border=True)
-    Text(product_form_box, text="Nom du produit", grid=[0, 0], align="left")
-    name = TextBox(product_form_box, width="fill", grid=[1, 0])
-    Text(product_form_box, text="Description", grid=[0, 1], align="left")
-    description = TextBox(product_form_box, width="fill", grid=[1, 1])
-    Text(product_form_box, text="Prix (kg)", grid=[0, 2], align="left")
-    price_kg = TextBox(product_form_box, width="fill", grid=[1, 2])
-    Text(product_form_box, text="Prix fixe (laisser vide si prix au kg)", grid=[0, 3], align="left")
-    price_fixed = TextBox(product_form_box, width="fill", grid=[1, 3])
-    Text(product_form_box, text="Péremption (jours)", grid=[0, 4], align="left")
-    expiration_days = TextBox(product_form_box, width="fill", grid=[1, 4], command=update_expiry_date)
-    Text(product_window, text="Données étiquette")
-    label_form_box = Box(product_window, layout="grid", width="fill", border=True)
-    Text(label_form_box, text="Date d'emballage", grid=[0, 0], align="left")
-    packing_date = TextBox(label_form_box, width="fill", grid=[1, 0])
-    Text(label_form_box, text="Date de péremption", grid=[0, 1], align="left")
-    expiry_date = TextBox(label_form_box, width="fill", grid=[1, 1])
-    buttons_box = Box(product_window, width="fill", align="bottom")
-    PushButton(buttons_box, text="Annuler", align="right")
-    PushButton(buttons_box, text="OK", align="right", command=button_confirm_product)
+        product_selection = Window(app, title="Sélectionner un produit à peser...", height=300, visible=False)
+        Text(product_selection, text="")
+        Text(product_selection, text="Sélectionner le produit")
+        Combo(product_selection, width="fill", options=products_dict, command=select_product)
+        Text(product_selection, text="")
+        Text(product_selection, text="Sélectionner le fournisseur")
+        Combo(product_selection, width="fill", options=sellers_dict, command=select_seller)
+        product_selection_buttons_box = Box(product_selection, width="fill", align="bottom")
+        PushButton(product_selection_buttons_box, text="Créer un nouveau produit", align="right", command=button_create_new_product)
+        PushButton(product_selection_buttons_box, text="OK", align="right", command=button_confirm_product_selection)
 
-    label_box = Box(content_box, height="fill", width="fill", align="left", visible=False)
-    label_preview = Drawing(label_box, width=510, height=426)
-    label_preview.image(0, 0, os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static', 'label.png'))
-    label_box.show()
+        product_window = Window(app, title="Gestion d'article", width=800, visible=False)
+        Text(product_window, text="Données article")
+        product_form_box = Box(product_window, layout="grid", width="fill", border=True)
+        Text(product_form_box, text="Nom du produit", grid=[0, 0], align="left")
+        name = TextBox(product_form_box, width=50, align="left", grid=[1, 0])
+        Text(product_form_box, text="Description", grid=[0, 1], align="left")
+        description = TextBox(product_form_box, width=80, grid=[1, 1])
+        Text(product_form_box, text="Prix (kg)", grid=[0, 2], align="left")
+        price_kg = TextBox(product_form_box, width=20, align="left", grid=[1, 2])
+        Text(product_form_box, text="Prix fixe (laisser vide si prix au kg)", grid=[0, 3], align="left")
+        price_fixed = TextBox(product_form_box, width=20, align="left", grid=[1, 3])
+        Text(product_form_box, text="Péremption (jours)", grid=[0, 4], align="left")
+        expiration_days = TextBox(product_form_box, width=20, align="left", grid=[1, 4], command=update_expiry_date)
+        Text(product_window, text="Données étiquette")
+        label_form_box = Box(product_window, layout="grid", width="fill", border=True)
+        Text(label_form_box, text="Date d'emballage", grid=[0, 0], align="left")
+        packing_date = TextBox(label_form_box, width="fill", grid=[1, 0])
+        Text(label_form_box, text="Date de péremption", grid=[0, 1], align="left")
+        expiry_date = TextBox(label_form_box, width="fill", grid=[1, 1])
+        buttons_box = Box(product_window, width="fill", align="bottom")
+        PushButton(buttons_box, text="Annuler", align="right", command=cancel_product)
+        PushButton(buttons_box, text="OK", align="right", command=button_confirm_product)
 
-    if not product:
-        change_product()
+        label_box = Box(content_box, height="fill", width="fill", align="left", visible=False)
+        label_preview = Drawing(label_box, width=510, height=426)
+        label_preview.image(0, 0, os.path.join(os.path.dirname(os.path.realpath(__file__)), 'static', 'label.png'))
+        label_box.show()
+
+        if not product:
+            change_product()
 
     app.display()
