@@ -1,11 +1,13 @@
-from guizero import App, Text, PushButton, TextBox, Combo, Window, Box, Drawing
-import sqlite3
 import datetime
 import math
 import csv
 import serial
 import io
 import os
+
+import sqlite3
+
+from guizero import App, Text, PushButton, TextBox, Combo, Window, Box, Drawing
 
 from pdf2image import convert_from_bytes
 from reportlab.platypus import Paragraph, Frame
@@ -51,7 +53,6 @@ def read_kern():
             weight = int(line[11:16])/1000
             status_message.value = "Mesure {} kg".format(weight)
         else:
-            print("No line")
             if not serial_error:
                 status_message.value = "Pas de mesure"
             else:
@@ -67,7 +68,7 @@ def read_kern():
 def get_weight():
     global label
     weight = read_kern()
-    print("Weight: {}".format(weight))
+    status_message.value = "Acquisition poids: {} kg".format(weight)
     if weight:
         if label:
             label['weight'] = weight
