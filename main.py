@@ -98,7 +98,8 @@ def get_product(product_id):
 
     row = cur.fetchone()
 
-    product = {"id": row[0], "name": row[1], "description": row[2], "price_kg": row[3], "price_fixed": row[4], "expiration_days": row[5], }
+    product = {"id": row[0], "name": row[1], "description": row[2], "price_kg": row[3], "price_fixed": row[4],
+               "expiration_days": row[5], }
     return product
 
 
@@ -106,12 +107,13 @@ def save_product(product):
     cur = conn.cursor()
     if 'id' in product:
         product_query = """UPDATE products SET name=?, description=?, price_kg=?, price_fixed=?, expiration_days=? WHERE oid=?"""
-        cur.execute(product_query, (product['name'], product['description'], product['price_kg'], product['price_fixed'], product['expiration_days'], product['id'],))
+        cur.execute(product_query, (product['name'], product['description'], product['price_kg'],
+                                    product['price_fixed'], product['expiration_days'], product['id'],))
         conn.commit()
     else:
         product_query = """INSERT INTO products (name, description, price_kg, price_fixed, expiration_days) VALUES (?, ?, ?, ?, ?)"""
-        cur.execute(product_query, (product['name'], product['description'], product['price_kg'], product['price_fixed'],
-                                    product['expiration_days']))
+        cur.execute(product_query, (product['name'], product['description'], product['price_kg'],
+                                    product['price_fixed'], product['expiration_days']))
         conn.commit()
         product_query = """SELECT oid FROM products ORDER BY oid DESC"""
         cur.execute(product_query)
@@ -350,7 +352,8 @@ def export_file():
         data = get_labels()
         with open(file_name, 'w', newline='') as f:
             writer = csv.writer(f, delimiter=';')
-            writer.writerow(['#ID', 'Vendeur', '#ID produit', 'Nom', 'Description', 'Poids', 'Prix', 'Prix/kg', 'Date emballage', 'Date consommation'])
+            writer.writerow(['#ID', 'Vendeur', '#ID produit', 'Nom', 'Description', 'Poids', 'Prix', 'Prix/kg',
+                             'Date emballage', 'Date consommation'])
             writer.writerows(data)
         app.info("Export des données", "Les données ont été exportées dans le fichier {}".format(file_name))
     app.repeat(1000, get_weight)
@@ -386,9 +389,11 @@ def generate_pdf_label(label):
     c.drawString(44.4 * mm, 26.5 * mm, 'Gewicht')
 
     c.setFont('Helvetica', 8)
-    c.drawString(0.4 * mm, 22 * mm, "{}-{}-{}".format(label['packing_date'][8:10], label['packing_date'][5:7], label['packing_date'][0:4]))
+    c.drawString(0.4 * mm, 22 * mm, "{}-{}-{}".format(label['packing_date'][8:10], label['packing_date'][5:7],
+                                                      label['packing_date'][0:4]))
     c.setFont('Helvetica-Bold', 8)
-    c.drawString(22.4 * mm, 22 * mm, "{}-{}-{}".format(label['expiry_date'][8:10], label['expiry_date'][5:7], label['expiry_date'][0:4]))
+    c.drawString(22.4 * mm, 22 * mm, "{}-{}-{}".format(label['expiry_date'][8:10], label['expiry_date'][5:7],
+                                                       label['expiry_date'][0:4]))
     c.setFont('Helvetica', 8)
     c.drawString(44.4 * mm, 22 * mm, "{:5.3f} kg".format(label['weight']))
 
@@ -429,7 +434,8 @@ if __name__ == '__main__':
     app = App(title="L'agité du bocal", width=1024, height=600)
 
     if not ser:
-        app.error("Kern Scale", "La balance n'est pas connectée! Fermer l'application, connecter la balance et relancer l'application.")
+        app.error("Kern Scale",
+                  "La balance n'est pas connectée! Fermer l'application, connecter la balance et relancer l'application.")
     else:
         status_box = Box(app, width="fill", align="bottom", border=True)
         status_message = Text(status_box, text="Ready", size=10, align="left")
@@ -464,8 +470,10 @@ if __name__ == '__main__':
         Text(product_selection, text="Sélectionner le fournisseur")
         Combo(product_selection, width="fill", options=sellers_dict, command=select_seller)
         product_selection_buttons_box = Box(product_selection, width="fill", align="bottom")
-        PushButton(product_selection_buttons_box, text="Créer un nouveau produit", align="right", command=button_create_new_product)
-        PushButton(product_selection_buttons_box, text="OK", align="right", command=button_confirm_product_selection)
+        PushButton(product_selection_buttons_box, text="Créer un nouveau produit", align="right",
+                   command=button_create_new_product)
+        PushButton(product_selection_buttons_box, text="OK", align="right",
+                   command=button_confirm_product_selection)
 
         product_window = Window(app, title="Gestion d'article", width=800, visible=False)
         Text(product_window, text="Données article")
